@@ -1,0 +1,10 @@
+{
+  "name": "claude-usage",
+  "version": "1.0.0",
+  "description": "Let an AI agent see how much Claude Code quota it has left",
+  "bin": { "claude-usage": "./usage.mjs" },
+  "type": "module",
+  "scripts": { "test": "node --test test/*.test.mjs" },
+  "license": "MIT",
+  "files": ["usage.mjs", "README.md", "LICENSE"]
+}
