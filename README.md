@@ -38,7 +38,7 @@ $ claude-usage --json          # for the agent
 Zero dependencies — just Node.
 
 ```sh
-git clone <this repo> claude-usage
+git clone https://github.com/IvanSevill/claude-usage.git
 ```
 
 Then make your status line pipe through the dump. It **passes stdin straight through**,
@@ -98,6 +98,12 @@ long work:
   the file goes stale — the tool tells you (`stale: true`, and a warning in the report).
 - `rate_limits` only appears for **Claude.ai subscribers** (Pro/Max) and only **after the
   first API response** in a session. Before that, there's simply nothing to report.
+
+## See also
+
+[**promptheus**](https://github.com/IvanSevill/promptheus) — queue and schedule prompts for
+Claude Code so they run unattended. It uses this tool to know when its quota comes back, so a
+launch cut short by the limit is resumed instead of lost.
 
 ## Tests
 
