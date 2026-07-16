@@ -25,7 +25,7 @@ const REFRESH_MS = 60_000;
 const PROVIDER_WIDTH = 6;
 const BAR_CELLS = 13;
 const PERCENT_WIDTH = 4;
-export const SELECTED_PROVIDER_KEY = 'claude-usage.quota.selected-provider.v1';
+export const SELECTED_PROVIDER_KEY = 'quota-watch.provider.selected.v1';
 
 const providerLabel = (provider: QuotaProvider) => provider === 'claude' ? 'Claude' : 'Codex';
 
@@ -138,7 +138,7 @@ export function createQuotaTui(overrides: Partial<Dependencies> = {}): TuiPlugin
               <box
                 {...quotaControlLayout}
                 flexDirection="column"
-                id="claude-usage-quota-control"
+                id="quota-watch-control"
                 backgroundColor={interaction.background()}
                 on:focused={interaction.onFocus}
                 on:blurred={interaction.onBlur}
@@ -204,4 +204,4 @@ export function createQuotaTui(overrides: Partial<Dependencies> = {}): TuiPlugin
 
 const tui = createQuotaTui();
 
-export default { id: 'claude-usage.codex-quota', tui };
+export default { id: 'quota-watch.quota-indicator', tui };

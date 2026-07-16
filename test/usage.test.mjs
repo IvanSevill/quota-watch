@@ -1,4 +1,4 @@
-// claude-usage: el statusline vuelca los rate_limits a un archivo y esta CLI los lee.
+// quota-watch: el statusline vuelca los rate_limits a un archivo y esta CLI los lee.
 // Se prueba por proceso (spawn) porque es como se usa de verdad: en una tubería.
 
 import { test } from 'node:test';

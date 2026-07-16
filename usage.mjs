@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// claude-usage — let an AI agent (or you) see how much Claude Code quota is left.
+// quota-watch — unified quota monitoring for AI agents (Claude, Codex, Gemini, OpenAI).
 //
 // Why this exists
 // ---------------
@@ -97,7 +97,7 @@ function report({ json, quiet, min }) {
         ? `  ${name.padEnd(10)} ${bar(w.left)}  ${String(w.left).padStart(3)}% left   `
           + `resets in ${dur(w.resetsIn)}`
         : `  ${name.padEnd(10)} (no data)`;
-      console.log('Claude Code quota');
+      console.log('AI quota');
       console.log(line('session', five));
       console.log(line('week', week));
       if (age > 900) console.log(`\n  ⚠ data is ${dur(age * 1000)} old (status line hasn't refreshed)`);

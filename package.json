@@ -1,8 +1,8 @@
 {
-  "name": "claude-usage",
+  "name": "quota-watch",
   "version": "1.1.0",
-  "description": "Dependency-free Claude and Codex quota collectors",
-  "bin": { "claude-usage": "./usage.mjs", "usage": "./usage.mjs" },
+  "description": "Unified quota monitoring for Claude, Codex, Gemini, and OpenAI agents",
+  "bin": { "quota-watch": "./usage.mjs", "usage": "./usage.mjs" },
   "type": "module",
   "scripts": { "test": "node --test test/*.test.mjs" },
   "license": "MIT",

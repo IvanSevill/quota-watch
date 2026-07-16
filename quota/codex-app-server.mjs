@@ -128,7 +128,7 @@ export function requestCodexRateLimits({
     send({
       id: 1,
       method: 'initialize',
-      params: { clientInfo: { name: 'claude-usage', title: 'claude-usage', version: '1.1.0' }, capabilities: {} },
+      params: { clientInfo: { name: 'quota-watch', title: 'quota-watch', version: '1.1.0' }, capabilities: {} },
     });
   });
 }

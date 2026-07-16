@@ -20,7 +20,7 @@ import { parseQuotaArgs, runQuotaCLI } from '../quota/cli.mjs';
 
 const NOW = Date.parse('2026-07-15T12:00:00Z');
 const RESET = '2026-08-14T12:00:00.000Z';
-const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'claude-usage-quota-'));
+const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'quota-watch-'));
 
 test('normalization preserves arbitrary IDs, arbitrary duration, and null rather than false zero', () => {
   const snapshot = normalizeCodexRateLimits({

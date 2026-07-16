@@ -1,33 +1,32 @@
-# claude-usage
+# quota-watch
 
-**Dependency-free quota snapshots for Claude Code, Codex, and OpenCode agents.**
+**Unified quota monitoring for Claude, Codex, Gemini, and OpenAI agents.**
 
 > Zero dependencies. Just Node.
 
 ## The problem
 
-Claude Code knows your rate limits — the 5-hour session window and the 7-day weekly
-window — but it exposes them in exactly **one** place: the JSON it pipes to your
-**status line** command.
+AI agents burn through rate limits fast. Claude Code exposes session and weekly windows
+in exactly one place — the status-line JSON — and agents running inside can't read it.
+Codex has its own local app-server. Gemini and OpenAI have their own limits.
 
-An agent running *inside* Claude Code can't read that. So it works blind: it has no idea
-whether it has 90% of its budget left or is about to hit the wall mid-task.
+None of them tell you when you're about to hit the wall mid-task.
 
 ## The fix
 
-`claude-usage` tees that payload to a file the agent *can* read, and gives it a CLI to
-ask a simple question: **how much do I have left?** It also collects Codex limits without
-changing the established Claude CLI contract.
+`quota-watch` collects rate-limit data from multiple providers through a single CLI and
+exposes it to agents as machine-readable JSON. It also renders a compact human-readable
+report so *you* can see what's left.
 
 ```
-$ claude-usage
-Claude Code quota
+$ quota-watch
+AI quota
   session    ████████░░░░░░░░░░░░   41% left   resets in 3h 44m
   week       ██████████████████░░   90% left   resets in 6d 18h
 ```
 
 ```
-$ claude-usage --json          # for the agent
+$ quota-watch --json          # for the agent
 {
   "ok": true,
   "stale": false,
@@ -38,8 +37,10 @@ $ claude-usage --json          # for the agent
 
 ## Install
 
+Zero dependencies — just Node.
+
 ```sh
-git clone https://github.com/IvanSevill/claude-usage.git
+git clone https://github.com/IvanSevill/quota-watch.git
 ```
 
 Then wire it into your Claude Code status line. It **passes stdin straight through**,
@@ -50,7 +51,7 @@ so it chains in front of whatever status line you already have:
 {
   "statusLine": {
     "type": "command",
-    "command": "node \"/path/to/claude-usage/usage.mjs\" dump | sh ~/.claude/statusline-command.sh"
+    "command": "node \"/path/to/quota-watch/usage.mjs\" dump | sh ~/.claude/statusline-command.sh"
   }
 }
 ```
@@ -61,7 +62,7 @@ No status line yet? Use this tool as one — it renders a compact usage bar:
 {
   "statusLine": {
     "type": "command",
-    "command": "node \"/path/to/claude-usage/usage.mjs\" statusline"
+    "command": "node \"/path/to/quota-watch/usage.mjs\" statusline"
   }
 }
 ```
@@ -74,7 +75,7 @@ The data lands in `~/.claude/usage.json` (override with `CLAUDE_USAGE_FILE`).
 |---|---|
 | `usage.mjs` | Human-readable report |
 | `usage.mjs --json` | Machine-readable — **this is what an agent calls** |
-| `usage.mjs --schema` | Canonical provider-neutral Claude snapshot |
+| `usage.mjs --schema` | Canonical provider-neutral snapshot |
 | `usage.mjs --provider codex --json` | Canonical Codex snapshot; app-server first, rollout fallback |
 | `usage.mjs --provider codex --source app-server` | Use only Codex's official local app-server API |
 | `usage.mjs --provider codex --source rollout` | Use only allow-listed rate-limit data in local rollouts |
@@ -88,7 +89,14 @@ canonical `{ provider, status, limits, source, plan, credits, reached, errors }`
 Codex always uses the canonical shape. Canonical guard exits are `0` for usable, `1` for
 exhausted/below `--min`, and `2` for unavailable, stale, or unknown data.
 
-## Codex collection
+## Provider collection
+
+### Claude
+
+Reads the status-line usage file (`~/.claude/usage.json`) that Claude Code pipes to
+your status-line command. Exposes the 5-hour session window and 7-day weekly window.
+
+### Codex
 
 `auto` starts `codex app-server`, performs the documented initialize handshake, and calls
 `account/rateLimits/read`. This is the preferred, official local source and preserves every
@@ -115,6 +123,11 @@ The official `codex app-server` rateLimits endpoint returns structured data incl
 This metadata is preserved in the canonical snapshot schema and available through
 `--schema` or `--json` output.
 
+### Gemini and OpenAI
+
+Architecture-ready. The canonical schema supports arbitrary providers with normalized
+limit windows, credits, and source metadata. Contributions welcome.
+
 ## OpenCode integrations
 
 ### Server tool plugin
@@ -129,7 +142,7 @@ have been observed.
 Install a loader under `~/.config/opencode/plugins`, using the clone's absolute path:
 
 ```js
-export { default } from "file:///path/to/claude-usage/opencode/usage-metrics.mjs";
+export { default } from "file:///path/to/quota-watch/opencode/usage-metrics.mjs";
 ```
 
 ### Global TUI quota indicator
@@ -165,7 +178,7 @@ exists. It does not require the server tool plugin.
 **Install dependencies** (pinned, no lifecycle scripts):
 
 ```powershell
-Set-Location "$HOME\.claude\tools\claude-usage\opencode\tui"
+Set-Location "$HOME\.claude\tools\quota-watch\opencode\tui"
 npm install --ignore-scripts
 ```
 
@@ -176,7 +189,7 @@ npm install --ignore-scripts
   "$schema": "https://opencode.ai/tui.json",
   "plugin": [
     "opencode-subagent-statusline",
-    "file:///C:/Users/ivans/.claude/tools/claude-usage/opencode/tui/codex-quota-indicator.tsx"
+    "file:///C:/Users/ivans/.claude/tools/quota-watch/opencode/tui/codex-quota-indicator.tsx"
   ]
 }
 ```
@@ -194,7 +207,7 @@ Quit and restart OpenCode after changing TUI configuration.
 ## Guarding a long job
 
 ```sh
-claude-usage --quiet --min 15 || { echo "Not enough quota; try after the reset."; exit 1; }
+quota-watch --quiet --min 15 || { echo "Not enough quota; try after the reset."; exit 1; }
 ```
 
 ## Telling an agent about it
@@ -202,7 +215,7 @@ claude-usage --quiet --min 15 || { echo "Not enough quota; try after the reset."
 Put this in your `CLAUDE.md` so the model checks its own budget before committing to
 long work:
 
-> Before starting a long task, run `node /path/to/claude-usage/usage.mjs --json` to see
+> Before starting a long task, run `node /path/to/quota-watch/usage.mjs --json` to see
 > how much quota is left. If `session.left` is low, prefer to finish and checkpoint
 > rather than start something you can't complete.
 

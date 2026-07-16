@@ -1,7 +1,7 @@
 import { collectCodexQuota, normalizeCodexRateLimits, quotaFromHeaders } from '../quota/index.mjs';
 import { normalizeWindow, timestamp, withStaleness } from '../quota/schema.mjs';
 
-const FETCH_STATE = Symbol.for('claude-usage.opencode.usage-metrics.fetch');
+const FETCH_STATE = Symbol.for('quota-watch.opencode.usage-metrics.fetch');
 const SCAN_CACHE_MS = 60_000;
 
 const number = (value) => {
