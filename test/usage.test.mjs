@@ -12,10 +12,16 @@ import { fileURLToPath } from 'node:url';
 const CLI = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'usage.mjs');
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'cu-'));
 const FILE = path.join(TMP, 'usage.json');
+const CACHE = path.join(TMP, 'quota-cache.json');
 
 const run = (args = [], input = '') => {
   const r = spawnSync(process.execPath, [CLI, ...args], {
-    input, encoding: 'utf8', env: { ...process.env, CLAUDE_USAGE_FILE: FILE },
+    input, encoding: 'utf8', env: {
+      ...process.env,
+      CLAUDE_USAGE_FILE: FILE,
+      CLAUDE_USAGE_CACHE_FILE: CACHE,
+      CODEX_HOME: path.join(TMP, 'codex-home'),
+    },
   });
   return { code: r.status, out: r.stdout, err: r.stderr };
 };
@@ -126,4 +132,26 @@ test('statusline: se puede usar como statusline y pinta el resumen', () => {
   assert.match(out, /week/);
   assert.match(out, /58%/);
   assert.ok(fs.existsSync(FILE), 'y de paso guarda el dato');
+});
+
+test('--schema exposes the provider-neutral snapshot without changing legacy --json', () => {
+  reset();
+  run(['dump'], payload(42, 50));
+  const legacy = JSON.parse(run(['--json']).out);
+  const canonical = JSON.parse(run(['--schema']).out);
+  assert.equal(legacy.session.left, 58);
+  assert.equal(legacy.provider, undefined);
+  assert.equal(canonical.provider, 'claude');
+  assert.equal(canonical.limits.five_hour.primary.remainingPercent, 58);
+});
+
+test('Codex source validation is provider-aware and does not require credentials', () => {
+  const result = run(['--provider', 'codex', '--source', 'rollout', '--json']);
+  const snapshot = JSON.parse(result.out);
+  assert.equal(snapshot.provider, 'codex');
+  assert.ok(['available', 'unavailable', 'error'].includes(snapshot.status));
+  assert.ok([0, 1, 2].includes(result.code));
+  const invalid = run(['--provider', 'claude', '--source', 'rollout']);
+  assert.equal(invalid.code, 2);
+  assert.match(invalid.err, /applies only to codex/);
 });

@@ -1,10 +1,21 @@
 {
   "name": "claude-usage",
-  "version": "1.0.0",
-  "description": "Let an AI agent see how much Claude Code quota it has left",
-  "bin": { "claude-usage": "./usage.mjs" },
+  "version": "1.1.0",
+  "description": "Dependency-free Claude and Codex quota collectors",
+  "bin": { "claude-usage": "./usage.mjs", "usage": "./usage.mjs" },
   "type": "module",
   "scripts": { "test": "node --test test/*.test.mjs" },
   "license": "MIT",
-  "files": ["usage.mjs", "README.md", "LICENSE"]
+  "exports": {
+    ".": "./quota/index.mjs",
+    "./schema": "./quota/schema.mjs",
+    "./cache": "./quota/cache.mjs",
+    "./guard": "./quota/guard.mjs",
+    "./claude": "./quota/claude.mjs",
+    "./codex-app-server": "./quota/codex-app-server.mjs",
+    "./codex-rollout": "./quota/codex-rollout.mjs",
+    "./headers": "./quota/headers.mjs",
+    "./opencode": "./opencode/usage-metrics.mjs"
+  },
+  "files": ["usage.mjs", "usage.cmd", "quota/", "opencode/", "README.md", "LICENSE"]
 }

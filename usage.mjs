@@ -12,6 +12,9 @@
 //   statusline   same, plus render a compact usage bar (use it AS your status line)
 //   (no args)    human-readable report of what's left
 //   --json       machine-readable, for agents/scripts
+//   --schema     provider-neutral canonical snapshot (Claude or Codex)
+//   --provider   claude (default) or codex
+//   --source     Codex source: auto, app-server, or rollout
 //   --quiet      only the exit code (0 = above threshold, 1 = below)
 //   --min <n>    threshold in % remaining for --quiet (default 10)
 //
@@ -20,6 +23,8 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+
+import { runQuotaCLI } from './quota/cli.mjs';
 
 // Overridable so tests (and unusual setups) don't touch the real file.
 const FILE = process.env.CLAUDE_USAGE_FILE || path.join(os.homedir(), '.claude', 'usage.json');
@@ -121,6 +126,13 @@ if (cmd === 'dump' || cmd === 'statusline') {
     console.log([seg('session', five), seg('week', week)].join('  |  '));
   }
   process.exit(0);
+}
+
+// The historical Claude interface remains the default. Canonical schema output is explicit,
+// while Codex always uses it because the old session/week object is Claude-specific.
+const provider = val('--provider', 'claude');
+if (has('--schema') || provider !== 'claude' || has('--source')) {
+  process.exit(await runQuotaCLI(argv));
 }
 
 process.exit(report({
