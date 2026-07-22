@@ -15,7 +15,8 @@
     "./codex-app-server": "./quota/codex-app-server.mjs",
     "./codex-rollout": "./quota/codex-rollout.mjs",
     "./headers": "./quota/headers.mjs",
-    "./opencode": "./opencode/usage-metrics.mjs"
+    "./opencode": "./opencode/usage-metrics.mjs",
+    "./opencode/project-python-path": "./opencode/project-python-path.mjs"
   },
   "files": ["usage.mjs", "usage.cmd", "quota/", "opencode/", "README.md", "LICENSE"]
 }
