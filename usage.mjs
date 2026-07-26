@@ -25,6 +25,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { runQuotaCLI } from './quota/cli.mjs';
+import { runRemainingCLI } from './quota/remaining.mjs';
 
 // Overridable so tests (and unusual setups) don't touch the real file.
 const FILE = process.env.CLAUDE_USAGE_FILE || path.join(os.homedir(), '.claude', 'usage.json');
@@ -110,6 +111,8 @@ function report({ json, quiet, min }) {
 
 // --- dispatch ----------------------------------------------------------------
 const argv = process.argv.slice(2);
+if (argv[0] === 'remaining') process.exit(await runRemainingCLI(argv.slice(1)));
+
 const cmd = argv.find((a) => !a.startsWith('--'));
 const has = (f) => argv.includes(f);
 const val = (f, d) => { const i = argv.indexOf(f); return i !== -1 ? argv[i + 1] : d; };

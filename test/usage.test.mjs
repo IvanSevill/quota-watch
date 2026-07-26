@@ -155,3 +155,24 @@ test('Codex source validation is provider-aware and does not require credentials
   assert.equal(invalid.code, 2);
   assert.match(invalid.err, /applies only to codex/);
 });
+
+test('remaining is routed positionally before the legacy Claude CLI', () => {
+  reset();
+  fs.rmSync(CACHE, { force: true });
+  run(['dump'], payload(42, 50));
+  const result = run(['remaining', 'claude', '--json', '--min', '50', '--no-cache']);
+  const output = JSON.parse(result.out);
+  assert.equal(result.code, 0);
+  assert.equal(output.schemaVersion, 1);
+  assert.equal(output.provider, 'claude');
+  assert.equal(output.minimumRemainingPercent, 50);
+  assert.equal(output.result, 'ok');
+  assert.equal(fs.existsSync(CACHE), false, '--no-cache must not create a quota cache');
+});
+
+test('remaining uses sysexits-style invalid invocation codes without changing legacy codes', () => {
+  const remaining = run(['remaining', 'gemini']);
+  assert.equal(remaining.code, 64);
+  assert.match(remaining.err, /claude or codex/);
+  assert.equal(run(['--provider', 'claude', '--source', 'rollout']).code, 2);
+});

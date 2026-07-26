@@ -11,6 +11,7 @@
     "./schema": "./quota/schema.mjs",
     "./cache": "./quota/cache.mjs",
     "./guard": "./quota/guard.mjs",
+    "./remaining": "./quota/remaining.mjs",
     "./claude": "./quota/claude.mjs",
     "./codex-app-server": "./quota/codex-app-server.mjs",
     "./codex-rollout": "./quota/codex-rollout.mjs",
@@ -18,5 +19,21 @@
     "./opencode": "./opencode/usage-metrics.mjs",
     "./opencode/project-python-path": "./opencode/project-python-path.mjs"
   },
-  "files": ["usage.mjs", "usage.cmd", "quota/", "opencode/", "README.md", "LICENSE"]
+  "files": [
+    "usage.mjs",
+    "usage.cmd",
+    "quota/",
+    "opencode/project-python-path.mjs",
+    "opencode/quota-display.d.mts",
+    "opencode/quota-display.mjs",
+    "opencode/usage-metrics.mjs",
+    "opencode/tui/codex-quota-indicator.tsx",
+    "opencode/tui/package-lock.json",
+    "opencode/tui/package.json",
+    "opencode/tui/quota-control.mjs",
+    "opencode/tui/quota-control.test.mjs",
+    "opencode/tui/tsconfig.json",
+    "README.md",
+    "LICENSE"
+  ]
 }

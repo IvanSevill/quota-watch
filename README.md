@@ -145,10 +145,40 @@ Install a loader under `~/.config/opencode/plugins`, using the clone's absolute 
 export { default } from "file:///path/to/quota-watch/opencode/usage-metrics.mjs";
 ```
 
+### Project-scoped Python PATH
+
+`opencode/project-python-path.mjs` provides a configurable `shell.env` plugin for projects
+whose Python virtual environment must precede the global `PATH`. The implementation is kept
+in this repository; the global plugin file contains only machine-specific project mapping.
+
+Create a loader such as `~/.config/opencode/plugins/quota-watch-python.js`:
+
+```js
+import { createProjectPythonPathPlugin } from "file:///C:/path/to/quota-watch/opencode/project-python-path.mjs";
+
+export default createProjectPythonPathPlugin({
+  projects: [
+    { root: "C:\\path\\to\\python-project", pythonDirectory: "backend\\.venv\\Scripts" },
+  ],
+});
+```
+
+Each mapping applies only when OpenCode's shell working directory is the configured root or
+one of its descendants. `pythonDirectory` must be relative and stay inside that root. Add
+more entries to `projects` for additional repositories. The plugin preserves the existing
+`PATH` key casing and does not add the Python directory twice. If OpenCode does not supply a
+non-empty `PATH` value to the hook, the plugin leaves the environment untouched rather than
+constructing a potentially incomplete replacement.
+
 ### Global TUI quota indicator
 
 The TUI plugin renders compact, right-aligned Claude or Codex remaining-capacity bars in
 OpenCode's global `app_bottom` slot.
+
+The Codex bar reports the remaining rate-limit percentage and reset time exposed by Codex.
+It does not report an exact remaining token count. The separate `usage_metrics` server tool
+can estimate current context occupancy when OpenCode provides message token usage and a
+context limit, but that is not the quota shown by this indicator.
 
 **Each usable row contains:**
 - Provider name (first row only; continuation rows align beneath)
@@ -178,7 +208,7 @@ exists. It does not require the server tool plugin.
 **Install dependencies** (pinned, no lifecycle scripts):
 
 ```powershell
-Set-Location "$HOME\.claude\tools\quota-watch\opencode\tui"
+Set-Location "C:\Users\ivans\Desktop\IngenieriaSoftware\Programas\quota-watch\opencode\tui"
 npm install --ignore-scripts
 ```
 
@@ -189,12 +219,12 @@ npm install --ignore-scripts
   "$schema": "https://opencode.ai/tui.json",
   "plugin": [
     "opencode-subagent-statusline",
-    "file:///C:/Users/ivans/.claude/tools/quota-watch/opencode/tui/codex-quota-indicator.tsx"
+    "file:///C:/Users/ivans/Desktop/IngenieriaSoftware/Programas/quota-watch/opencode/tui/codex-quota-indicator.tsx"
   ]
 }
 ```
 
-Quit and restart OpenCode after changing TUI configuration.
+Quit and restart OpenCode after changing TUI configuration or a global plugin loader.
 
 ### TUI details
 
