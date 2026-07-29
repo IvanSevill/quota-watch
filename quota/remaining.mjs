@@ -1,5 +1,6 @@
 import { collectQuota } from './index.mjs';
 import { evaluateQuota } from './guard.mjs';
+import { DEFAULT_APP_SERVER_TIMEOUT_MS, parseAppServerTimeoutMs } from './app-server-timeout.mjs';
 
 const PROVIDERS = new Set(['claude', 'codex']);
 const SOURCES = new Set(['auto', 'app-server', 'rollout']);
@@ -9,11 +10,14 @@ export function parseRemainingArgs(argv) {
   if (!provider) throw new TypeError('remaining needs a provider: claude or codex');
   if (!PROVIDERS.has(provider)) throw new TypeError('provider must be claude or codex');
 
-  const options = { provider, json: false, min: 0, cache: true, source: 'auto' };
+  const options = {
+    provider, json: false, min: 0, cache: true, source: 'auto',
+    timeoutMs: DEFAULT_APP_SERVER_TIMEOUT_MS,
+  };
   const seen = new Set();
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    if (!['--json', '--min', '--no-cache', '--source'].includes(arg)) {
+    if (!['--json', '--min', '--no-cache', '--source', '--app-server-timeout-ms'].includes(arg)) {
       throw new TypeError(`unexpected argument: ${arg}`);
     }
     if (seen.has(arg)) throw new TypeError(`duplicate option: ${arg}`);
@@ -22,9 +26,12 @@ export function parseRemainingArgs(argv) {
     else if (arg === '--no-cache') options.cache = false;
     else {
       if (args[i + 1] === undefined || args[i + 1].startsWith('--')) {
+        if (arg === '--app-server-timeout-ms') parseAppServerTimeoutMs(undefined);
         throw new TypeError(`${arg} needs a value`);
       }
-      options[arg.slice(2)] = args[++i];
+      const value = args[++i];
+      if (arg === '--app-server-timeout-ms') options.timeoutMs = parseAppServerTimeoutMs(value);
+      else options[arg.slice(2)] = value;
     }
   }
 
@@ -36,6 +43,10 @@ export function parseRemainingArgs(argv) {
   if (provider === 'claude' && options.source !== 'auto') {
     throw new TypeError('--source applies only to codex');
   }
+  if (provider === 'claude' && seen.has('--app-server-timeout-ms')) {
+    throw new TypeError('--app-server-timeout-ms applies only to codex');
+  }
+  if (provider === 'claude') delete options.timeoutMs;
   return options;
 }
 
@@ -120,11 +131,13 @@ export async function runRemainingCLI(argv, {
   }
 
   try {
-    const snapshot = await collect({
+    const collectOptions = {
       provider: options.provider,
       source: options.source,
       cache: options.cache,
-    });
+    };
+    if (options.provider === 'codex') collectOptions.timeoutMs = options.timeoutMs;
+    const snapshot = await collect(collectOptions);
     const result = buildRemainingResult(snapshot, options);
     stdout.write(`${options.json ? JSON.stringify(result, null, 2) : formatRemaining(result)}\n`);
     return result.result === 'ok' ? 0 : result.result === 'low' ? 1 : 2;

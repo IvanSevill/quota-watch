@@ -9,7 +9,7 @@ import path from 'node:path';
 import { readQuotaCache, writeQuotaCache } from '../quota/cache.mjs';
 import { collectClaudeQuota, normalizeClaudeUsage } from '../quota/claude.mjs';
 import {
-  collectCodexAppServer, normalizeCodexRateLimits, requestCodexRateLimits, resolveCodexExecutable,
+  normalizeCodexRateLimits, requestCodexRateLimits, resolveCodexExecutable,
 } from '../quota/codex-app-server.mjs';
 import { collectCodexRollout, rateLimitsFromRolloutEvent } from '../quota/codex-rollout.mjs';
 import { quotaFromHeaders } from '../quota/headers.mjs';
@@ -110,7 +110,8 @@ test('Codex app-server performs initialize/initialized/read with IDs and kills t
     assert.equal(command, 'codex');
     assert.deepEqual(args, ['app-server']);
     assert.deepEqual(options.stdio, ['pipe', 'pipe', 'pipe']);
-    assert.equal(options.env.NoDefaultCurrentDirectoryInExePath, '1');
+    if (process.platform === 'win32') assert.equal(options.env.NoDefaultCurrentDirectoryInExePath, '1');
+    else assert.equal(options.env, undefined);
     return child;
   } });
   assert.equal(result.rateLimits.primary.usedPercent, 10);
@@ -134,7 +135,9 @@ test('Windows Codex resolution ignores cwd and selects an absolute PATH executab
 
 test('Codex app-server timeout is an expected error state and kills its child', async () => {
   const child = fakeAppServer({}, { reply: false });
-  const snapshot = await collectCodexAppServer({ spawn: () => child, timeoutMs: 10, now: NOW });
+  const snapshot = await collectCodexQuota({
+    source: 'app-server', cache: false, spawn: () => child, timeoutMs: 10, now: NOW,
+  });
   assert.equal(snapshot.status, 'error');
   assert.equal(snapshot.errors[0].code, 'timeout');
   assert.equal(child.killed, true);
@@ -234,6 +237,13 @@ test('explicit app-server never returns a rollout cache', async () => {
 
 test('CLI validates options and returns planned 0/1/2 exits without leaking data', async () => {
   assert.equal(parseQuotaArgs(['--provider', 'codex', '--source', 'rollout', '--min', '15']).provider, 'codex');
+  assert.equal(parseQuotaArgs(['--provider', 'codex']).timeoutMs, 5000);
+  assert.equal(parseQuotaArgs(['--provider', 'codex', '--app-server-timeout-ms', '15000']).timeoutMs, 15000);
+  assert.equal(parseQuotaArgs(['--provider', 'claude']).timeoutMs, undefined);
+  assert.throws(() => parseQuotaArgs(['--app-server-timeout-ms', '15000']), /only to codex/);
+  for (const value of ['999', '60001', 'slow']) {
+    assert.throws(() => parseQuotaArgs(['--provider', 'codex', '--app-server-timeout-ms', value]), /between 1000 and 60000/);
+  }
   assert.throws(() => parseQuotaArgs(['--provider', 'other']), /claude or codex/);
   const output = { text: '', write(value) { this.text += value; } };
   const snapshot = createSnapshot({
@@ -241,6 +251,11 @@ test('CLI validates options and returns planned 0/1/2 exits without leaking data
     source: { kind: 'test', official: false, observedAt: NOW }, now: NOW,
   });
   assert.equal(await runQuotaCLI(['--json', '--min', '20'], { collect: async () => snapshot, stdout: output, stderr: output }), 0);
+  let collected;
+  assert.equal(await runQuotaCLI(['--provider', 'codex', '--app-server-timeout-ms', '15000'], {
+    collect: async (options) => { collected = options; return snapshot; }, stdout: output, stderr: output,
+  }), 0);
+  assert.equal(collected.timeoutMs, 15000);
   assert.equal(await runQuotaCLI(['--quiet', '--min', '21'], { collect: async () => snapshot, stdout: output, stderr: output }), 1);
   const empty = createSnapshot({
     provider: 'codex', limits: { codex: { primary: { remainingPercent: 0 } } },
@@ -248,5 +263,8 @@ test('CLI validates options and returns planned 0/1/2 exits without leaking data
   });
   assert.equal(await runQuotaCLI(['--quiet'], { collect: async () => empty, stdout: output, stderr: output }), 1);
   assert.equal(await runQuotaCLI([], { collect: async () => ({ ...snapshot, status: 'unavailable' }), stdout: output, stderr: output }), 2);
+  assert.equal(await runQuotaCLI(['--provider', 'codex', '--app-server-timeout-ms', '999'], {
+    collect: async () => snapshot, stdout: output, stderr: output,
+  }), 64);
   assert.doesNotMatch(output.text, /credential|authorization|SECRET/);
 });

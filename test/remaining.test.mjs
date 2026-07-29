@@ -28,15 +28,20 @@ function snapshot(overrides = {}) {
 
 test('remaining parser requires a supported provider and validates command options', () => {
   assert.deepEqual(parseRemainingArgs(['codex', '--json', '--min', '12.5', '--no-cache', '--source', 'rollout']), {
-    provider: 'codex', json: true, min: 12.5, cache: false, source: 'rollout',
+    provider: 'codex', json: true, min: 12.5, cache: false, source: 'rollout', timeoutMs: 5000,
   });
   assert.deepEqual(parseRemainingArgs(['claude']), {
     provider: 'claude', json: false, min: 0, cache: true, source: 'auto',
   });
+  assert.equal(parseRemainingArgs(['codex', '--app-server-timeout-ms', '15000']).timeoutMs, 15000);
   assert.throws(() => parseRemainingArgs([]), /provider/);
   assert.throws(() => parseRemainingArgs(['gemini']), /claude or codex/);
   assert.throws(() => parseRemainingArgs(['claude', '--source', 'rollout']), /only to codex/);
+  assert.throws(() => parseRemainingArgs(['claude', '--app-server-timeout-ms', '15000']), /only to codex/);
   assert.throws(() => parseRemainingArgs(['codex', '--min', '101']), /between 0 and 100/);
+  assert.throws(() => parseRemainingArgs(['codex', '--app-server-timeout-ms', '999']), /between 1000 and 60000/);
+  assert.throws(() => parseRemainingArgs(['codex', '--app-server-timeout-ms', '60001']), /between 1000 and 60000/);
+  assert.throws(() => parseRemainingArgs(['codex', '--app-server-timeout-ms', 'slow']), /integer between 1000 and 60000/);
   assert.throws(() => parseRemainingArgs(['codex', '--json', 'extra']), /unexpected argument/);
 });
 
@@ -106,7 +111,7 @@ test('runner forwards cache and source, emits JSON, and returns 0/1/2', async ()
   assert.equal(await runRemainingCLI(['codex', '--json', '--min', '12.5', '--no-cache', '--source', 'rollout'], {
     collect, stdout: output, stderr: output,
   }), 0);
-  assert.deepEqual(collected, { provider: 'codex', source: 'rollout', cache: false });
+  assert.deepEqual(collected, { provider: 'codex', source: 'rollout', cache: false, timeoutMs: 5000 });
   assert.equal(JSON.parse(output.text).minimumRemainingPercent, 12.5);
 
   assert.equal(await runRemainingCLI(['codex', '--min', '13'], {
@@ -115,6 +120,15 @@ test('runner forwards cache and source, emits JSON, and returns 0/1/2', async ()
   assert.equal(await runRemainingCLI(['claude'], {
     collect: async () => snapshot({ provider: 'claude', limits: {} }), stdout: stream(), stderr: stream(),
   }), 2);
+});
+
+test('runner forwards the Codex app-server timeout override', async () => {
+  let collected;
+  assert.equal(await runRemainingCLI(['codex', '--app-server-timeout-ms', '15000'], {
+    collect: async (options) => { collected = options; return snapshot(); },
+    stdout: stream(), stderr: stream(),
+  }), 0);
+  assert.equal(collected.timeoutMs, 15000);
 });
 
 test('plain output is allow-listed and contains no ANSI, emoji, secrets, or raw messages', async () => {
@@ -136,6 +150,14 @@ test('invalid invocation exits 64 and unexpected collector failures exit 70 safe
   const invalid = stream();
   assert.equal(await runRemainingCLI(['gemini'], { stdout: invalid, stderr: invalid }), 64);
   assert.match(invalid.text, /claude or codex/);
+
+  for (const value of ['999', '60001', 'slow']) {
+    const timeout = stream();
+    assert.equal(await runRemainingCLI(['codex', '--app-server-timeout-ms', value], {
+      stdout: timeout, stderr: timeout,
+    }), 64);
+    assert.match(timeout.text, /--app-server-timeout-ms must be an integer between 1000 and 60000/);
+  }
 
   const internal = stream();
   assert.equal(await runRemainingCLI(['claude'], {

@@ -78,7 +78,9 @@ The data lands in `~/.claude/usage.json` (override with `CLAUDE_USAGE_FILE`).
 | `usage.mjs --schema` | Canonical provider-neutral snapshot |
 | `usage.mjs --provider codex --json` | Canonical Codex snapshot; app-server first, rollout fallback |
 | `usage.mjs --provider codex --source app-server` | Use only Codex's official local app-server API |
+| `usage.mjs --provider codex --app-server-timeout-ms 15000` | Allow up to 15 seconds for the Codex app-server handshake |
 | `usage.mjs --provider codex --source rollout` | Use only allow-listed rate-limit data in local rollouts |
+| `usage.mjs remaining codex --app-server-timeout-ms 15000` | Stable remaining-quota contract with a 15-second app-server timeout |
 | `usage.mjs --quiet --min 10` | No output; exits `1` if the tightest window is below 10% left |
 | `usage.mjs dump` | Save stdin's rate limits, pass stdin through (for the status line) |
 | `usage.mjs statusline` | Same, plus render a usage bar (use it *as* your status line) |
@@ -88,6 +90,9 @@ The data lands in `~/.claude/usage.json` (override with `CLAUDE_USAGE_FILE`).
 canonical `{ provider, status, limits, source, plan, credits, reached, errors }` shape.
 Codex always uses the canonical shape. Canonical guard exits are `0` for usable, `1` for
 exhausted/below `--min`, and `2` for unavailable, stale, or unknown data.
+`--app-server-timeout-ms` accepts integer values from `1000` through `60000` and defaults
+to `5000`. Invalid timeout values exit `64`; the option changes only Codex app-server waits,
+not rollout or cache fallback behavior.
 
 ## Provider collection
 

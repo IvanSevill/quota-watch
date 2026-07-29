@@ -15,6 +15,7 @@
 //   --schema     provider-neutral canonical snapshot (Claude or Codex)
 //   --provider   claude (default) or codex
 //   --source     Codex source: auto, app-server, or rollout
+//   --app-server-timeout-ms  Codex app-server timeout in ms (default 5000)
 //   --quiet      only the exit code (0 = above threshold, 1 = below)
 //   --min <n>    threshold in % remaining for --quiet (default 10)
 //
@@ -134,7 +135,7 @@ if (cmd === 'dump' || cmd === 'statusline') {
 // The historical Claude interface remains the default. Canonical schema output is explicit,
 // while Codex always uses it because the old session/week object is Claude-specific.
 const provider = val('--provider', 'claude');
-if (has('--schema') || provider !== 'claude' || has('--source')) {
+if (has('--schema') || provider !== 'claude' || has('--source') || has('--app-server-timeout-ms')) {
   process.exit(await runQuotaCLI(argv));
 }
 

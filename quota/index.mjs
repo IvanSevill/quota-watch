@@ -22,8 +22,10 @@ function freshestUsable(left, right) {
   return observed(left) >= observed(right) ? left : right;
 }
 
-export async function collectCodexQuota({ source = 'auto', cache = true, cacheFile, ...options } = {}) {
-  let snapshot = source === 'rollout' ? await collectCodexRollout(options) : await collectCodexAppServer(options);
+export async function collectCodexQuota({ source = 'auto', cache = true, cacheFile, timeoutMs, ...options } = {}) {
+  let snapshot = source === 'rollout'
+    ? await collectCodexRollout(options)
+    : await collectCodexAppServer({ ...options, timeoutMs });
   if (source === 'auto' && snapshot.status !== 'available') snapshot = await collectCodexRollout(options);
   if (!cache) return snapshot;
   const cached = await readQuotaCache('codex', {
