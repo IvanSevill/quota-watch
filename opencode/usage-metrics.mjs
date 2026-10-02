@@ -108,48 +108,82 @@ function eventMessage(input) {
   return event.properties?.info ?? event.properties?.message ?? event.message ?? null;
 }
 
-export async function plugin(options = {}) {
-  const fetchState = installFetchObserver(options.target ?? globalThis);
-  const scan = options.scan ?? defaultScan;
-  const sessions = new Map();
-  const snapshots = new Map();
-  let sequence = 0;
+export function plugin(options = {}) {
   return {
-    'chat.params': async (input, output) => {
-      const sessionID = input?.sessionID ?? input?.session_id;
-      if (sessionID) sessions.set(sessionID, modelDetails(input, output));
-    },
-    event: async (input) => {
-      const message = eventMessage(input);
-      if (!message || message.role !== 'assistant') return;
-      const sessionID = message.sessionID ?? message.session_id;
-      const snapshot = contextSnapshot(sessions.get(sessionID), message);
-      if (!snapshot) return;
-      const messageID = message.id ?? `event-${sequence}`;
-      const order = stamp(message.time?.created ?? message.createdAt ?? message.created_at) ?? ++sequence;
-      let messages = snapshots.get(sessionID);
-      if (!messages) snapshots.set(sessionID, messages = new Map());
-      messages.set(messageID, { order, sequence: ++sequence, snapshot });
-    },
-    tool: {
-      usage_metrics: {
-        description: 'Show current Codex quota windows and OpenCode context occupancy.',
-        args: {},
-        execute: async (_args, context) => {
-          const now = typeof options.now === 'function' ? options.now() : options.now ?? Date.now();
-          const captured = fetchState?.latest
-            ? withStaleness(fetchState.latest, { now, freshnessMs: options.freshnessMs })
-            : null;
-          const codex = captured && !captured.source.stale ? captured : await scan(now);
-          const messages = snapshots.get(context?.sessionID);
-          const latest = messages
-            ? [...messages.values()].sort((a, b) => b.order - a.order || b.sequence - a.sequence)[0]
-            : null;
-          return JSON.stringify({ codex, context: latest?.snapshot ?? null }, null, 2);
-        },
-      },
+    id: 'quota-watch',
+    async setup(ctx) {
+      const scan = options.scan ?? defaultScan;
+      const sessions = new Map();
+      const snapshots = new Map();
+      const modelLimits = new Map();
+      const controller = new AbortController();
+      let latestQuota = null;
+      let sequence = 0;
+
+      await ctx.session.hook('context', async (event) => {
+        const ref = event.model;
+        const key = `${ref.providerID}/${ref.id}`;
+        if (!modelLimits.has(key)) {
+          const { data: models } = await ctx.model.list();
+          const model = models.find((entry) => entry.providerID === ref.providerID && entry.id === ref.id);
+          modelLimits.set(key, model?.limit?.context ?? null);
+        }
+        sessions.set(event.sessionID, modelDetails({ model: {
+          providerID: ref.providerID, modelID: ref.id, limit: { context: modelLimits.get(key) },
+        } }));
+      });
+
+      // Native provider response hook replaces V1's process-wide fetch wrapper.
+      // Only the exact Codex endpoint is observed; never inspect credentials or bodies.
+      await ctx.session.hook('http.response', (event) => {
+        if (!isCodexResponsesURL(event.request)) return;
+        const quota = quotaFromHeaders(event.response.headers, { status: event.response.status });
+        if (quota) latestQuota = quota;
+      });
+
+      await ctx.tool.transform((editor) => {
+        editor.add({
+          name: 'usage_metrics',
+          description: 'Show current Codex quota windows and OpenCode context occupancy.',
+          input: { type: 'object', properties: {}, additionalProperties: false },
+          execute: async (_input, context) => {
+            const now = typeof options.now === 'function' ? options.now() : options.now ?? Date.now();
+            const captured = latestQuota ? withStaleness(latestQuota, { now, freshnessMs: options.freshnessMs }) : null;
+            const codex = captured && !captured.source.stale ? captured : await scan(now);
+            const messages = snapshots.get(context.sessionID);
+            const latest = messages
+              ? [...messages.values()].sort((a, b) => b.order - a.order || b.sequence - a.sequence)[0]
+              : null;
+            return { content: JSON.stringify({ codex, context: latest?.snapshot ?? null }, null, 2) };
+          },
+        });
+      });
+
+      void (async () => {
+        try {
+          for await (const event of ctx.event.subscribe({ signal: controller.signal })) {
+            if (event.type === 'session.deleted') {
+              sessions.delete(event.data.sessionID);
+              snapshots.delete(event.data.sessionID);
+              continue;
+            }
+            if (event.type !== 'session.step.ended') continue;
+            const { sessionID, assistantMessageID, tokens } = event.data;
+            const snapshot = contextSnapshot(sessions.get(sessionID), {
+              ...sessions.get(sessionID), tokens,
+            });
+            if (!snapshot) continue;
+            let messages = snapshots.get(sessionID);
+            if (!messages) snapshots.set(sessionID, messages = new Map());
+            messages.set(assistantMessageID, { order: event.created, sequence: ++sequence, snapshot });
+          }
+        } catch (error) {
+          if (!controller.signal.aborted) console.error('[quota-watch] event subscription failed:', error);
+        }
+      })();
+      return () => { controller.abort(); sessions.clear(); snapshots.clear(); };
     },
   };
 }
 
-export default plugin;
+export default plugin();

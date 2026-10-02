@@ -1,7 +1,33 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import plugin, { contextSnapshot, createQuotaScanner, installFetchObserver, isCodexResponsesURL } from '../opencode/usage-metrics.mjs';
+import plugin, { plugin as makePlugin, contextSnapshot, createQuotaScanner, installFetchObserver, isCodexResponsesURL } from '../opencode/usage-metrics.mjs';
+
+async function harness(options) {
+  const hooks = {};
+  let tool;
+  let event;
+  let aborted;
+  const instance = makePlugin(options);
+  const cleanup = await instance.setup({
+    session: { hook: async (name, callback) => { hooks[name] = callback; } },
+    model: { list: async () => ({ data: [{ providerID: 'openai', id: 'm1', limit: { context: 1000 } }] }) },
+    tool: { transform: async (callback) => callback({ add: (value) => { tool = value; } }) },
+    event: { subscribe: ({ signal }) => {
+      aborted = signal;
+      return { async *[Symbol.asyncIterator]() {
+        while (!signal.aborted) {
+          if (event) { const next = event; event = null; yield next; }
+          else await new Promise((resolve) => setTimeout(resolve, 2));
+        }
+      } };
+    } },
+  });
+  return { hooks, tool, cleanup, aborted: () => aborted, send: async (value) => {
+    event = value;
+    await new Promise((resolve) => setTimeout(resolve, 15));
+  } };
+}
 
 test('fetch observer records all header families even on a non-2xx Codex response', async () => {
   const target = {
@@ -24,21 +50,19 @@ test('fetch observer records all header families even on a non-2xx Codex respons
   assert.equal(isCodexResponsesURL('https://evil.example/backend-api/codex/responses'), false);
 });
 
-test('direct plugin keeps quota and context occupancy as separate snapshots', async () => {
-  const target = { fetch: async () => ({ ok: true, status: 200, headers: new Headers() }) };
+test('V2 plugin keeps quota and context occupancy as separate snapshots', async () => {
   const quota = { provider: 'codex', status: 'unavailable', limits: {}, source: {}, errors: [] };
-  const hooks = await plugin({ target, scan: async () => quota });
-  await hooks['chat.params']({
-    sessionID: 's1', model: { providerID: 'openai', modelID: 'm1', limit: { context: 1000 } },
-  }, {});
-  await hooks.event({ event: { type: 'message.updated', properties: { info: {
-    id: 'm', role: 'assistant', sessionID: 's1', providerID: 'openai', modelID: 'm1',
-    tokens: { input: 100, output: 50 }, time: { created: '2026-07-15T12:00:00Z' },
-  } } } });
-  const result = JSON.parse(await hooks.tool.usage_metrics.execute({}, { sessionID: 's1' }));
+  const h = await harness({ scan: async () => quota });
+  await h.hooks.context({ sessionID: 's1', model: { providerID: 'openai', id: 'm1' } });
+  await h.send({ type: 'session.step.ended', created: 100, data: {
+    assistantMessageID: 'm', sessionID: 's1', tokens: { input: 100, output: 50 },
+  } });
+  const result = JSON.parse((await h.tool.execute({}, { sessionID: 's1' })).content);
   assert.deepEqual(result.codex, quota);
   assert.equal(result.context.occupancy.percent, 15);
   assert.equal(result.context.occupancy.basis, 'tokens.input + tokens.output');
+  h.cleanup();
+  assert.equal(h.aborted().aborted, true);
 });
 
 test('context occupancy remains null when the context limit is unknown', () => {
@@ -63,19 +87,17 @@ test('plugin background scanner prefers the aggregate auto collector and caches 
   assert.equal(calls[0].source, 'auto');
 });
 
-test('expired response-header quota is rescanned instead of remaining fresh forever', async () => {
-  const now = Date.parse('2026-07-16T12:00:00Z');
-  const target = { fetch: async () => ({
-    status: 200,
-    headers: new Headers({ 'x-codex-primary-used-percent': '10' }),
-  }) };
-  const state = installFetchObserver(target);
-  await target.fetch('https://chatgpt.com/backend-api/codex/responses');
-  state.latest.source.observedAt = new Date(now - 16 * 60_000).toISOString();
+test('expired V2 response-header quota is rescanned instead of remaining fresh forever', async () => {
+  const now = Date.now() + 16 * 60_000;
   const scanned = { provider: 'codex', status: 'available', limits: {}, source: { stale: false } };
   let scans = 0;
-  const hooks = await plugin({ target, now: () => now, scan: async () => { scans += 1; return scanned; } });
-  const result = JSON.parse(await hooks.tool.usage_metrics.execute({}, {}));
+  const h = await harness({ now: () => now, scan: async () => { scans += 1; return scanned; } });
+  await h.hooks['http.response']({
+    request: new Request('https://chatgpt.com/backend-api/codex/responses'),
+    response: new Response('', { headers: { 'x-codex-primary-used-percent': '10' } }),
+  });
+  const result = JSON.parse((await h.tool.execute({}, { sessionID: 's1' })).content);
+  h.cleanup();
   assert.equal(scans, 1);
   assert.deepEqual(result.codex, scanned);
 });
