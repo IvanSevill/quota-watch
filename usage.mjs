@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// quota-watch — unified quota monitoring for AI agents (Claude, Codex, Gemini, OpenAI).
+// quota-watch — quota monitoring for people, scripts, and AI agents (Claude Code and Codex).
 //
 // Why this exists
 // ---------------
@@ -16,7 +16,8 @@
 //   --provider   claude (default) or codex
 //   --source     Codex source: auto, app-server, or rollout
 //   --app-server-timeout-ms  Codex app-server timeout in ms (default 5000)
-//   --quiet      only the exit code (0 = above threshold, 1 = below)
+//   --quiet      only the exit code (0 = at or above threshold, 1 = below,
+//                2 = missing, stale, or unknown data)
 //   --min <n>    threshold in % remaining for --quiet (default 10)
 //
 // Zero dependencies. Data file: ~/.claude/usage.json
@@ -105,6 +106,10 @@ function report({ json, quiet, min }) {
       if (age > 900) console.log(`\n  ⚠ data is ${dur(age * 1000)} old (status line hasn't refreshed)`);
     }
   }
+
+  // A guard must not pass on data it cannot trust: same exit 2 as the canonical guard.
+  // `!(age <= 900)` also catches a file without a usable updatedAt.
+  if (quiet && (!data || !(age <= 900) || (!five && !week))) return 2;
 
   const worst = Math.min(five?.left ?? 100, week?.left ?? 100);
   return worst >= min ? 0 : 1;         // exit code: usable as a guard in scripts

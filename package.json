@@ -1,7 +1,7 @@
 {
   "name": "quota-watch",
   "version": "1.1.0",
-  "description": "Unified quota monitoring for Claude, Codex, Gemini, and OpenAI agents",
+  "description": "Shows remaining Claude Code and Codex quota for people, scripts, and agents",
   "bin": { "quota-watch": "./usage.mjs", "usage": "./usage.mjs" },
   "type": "module",
   "scripts": { "test": "node --test test/*.test.mjs" },

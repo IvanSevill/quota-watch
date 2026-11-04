@@ -124,6 +124,74 @@ test('--quiet mira la ventana MÁS restrictiva (sesión o semana)', () => {
   assert.equal(run(['--quiet', '--min', '10']).code, 1, 'debe fijarse en la peor de las dos');
 });
 
+const writeUsage = (ageSeconds, rate_limits) => fs.writeFileSync(FILE, JSON.stringify({
+  updatedAt: Math.floor(Date.now() / 1000) - ageSeconds,
+  rate_limits,
+}));
+const window = (used) => ({ used_percentage: used, resets_at: Math.floor(Date.now() / 1000) + 7200 });
+
+const assertGuardRefuses = (message) => {
+  for (const args of [['--quiet'], ['--quiet', '--min', '10'], ['--quiet', '--min', '0']]) {
+    const r = run(args);
+    assert.equal(r.code, 2, `${args.join(' ')}: ${message}`);
+    assert.equal(r.out, '', '--quiet prints nothing to stdout');
+    assert.equal(r.err, '', '--quiet prints nothing to stderr');
+  }
+};
+
+test('--quiet guard exits 2 when there is no usage file', () => {
+  reset();
+  assertGuardRefuses('missing data must not pass the guard');
+});
+
+test('--quiet guard exits 2 when the usage file is corrupt', () => {
+  reset();
+  fs.writeFileSync(FILE, 'not json');
+  assertGuardRefuses('unreadable data must not pass the guard');
+});
+
+test('--quiet guard exits 2 when the usage file holds no windows', () => {
+  reset();
+  writeUsage(0, {});
+  assertGuardRefuses('unknown quota must not pass the guard');
+});
+
+test('--quiet guard exits 2 on stale data, whatever the stale values say', () => {
+  reset();
+  writeUsage(3600, { five_hour: window(10), seven_day: window(10) });
+  assertGuardRefuses('stale plenty must not pass the guard');
+  writeUsage(3600, { five_hour: window(99), seven_day: window(99) });
+  assertGuardRefuses('stale and low is still reported as stale');
+});
+
+test('--quiet guard keeps exit 0 and 1 for data inside the 15-minute limit', () => {
+  reset();
+  writeUsage(800, { five_hour: window(10), seven_day: window(10) });
+  assert.equal(run(['--quiet', '--min', '10']).code, 0);
+  writeUsage(800, { five_hour: window(95), seven_day: window(10) });
+  assert.equal(run(['--quiet', '--min', '10']).code, 1);
+});
+
+test('--quiet guard still uses the one window that is present', () => {
+  reset();
+  writeUsage(0, { five_hour: window(10) });
+  assert.equal(run(['--quiet', '--min', '10']).code, 0);
+  writeUsage(0, { seven_day: window(95) });
+  assert.equal(run(['--quiet', '--min', '10']).code, 1);
+});
+
+test('report and --json without --quiet keep their exit codes on missing and stale data', () => {
+  reset();
+  assert.equal(run([]).code, 0, 'report, no data');
+  assert.equal(run(['--json']).code, 0, '--json, no data');
+  writeUsage(3600, { five_hour: window(10), seven_day: window(10) });
+  assert.equal(run([]).code, 0, 'report, stale');
+  assert.equal(run(['--json']).code, 0, '--json, stale');
+  writeUsage(0, { five_hour: window(95), seven_day: window(10) });
+  assert.equal(run([]).code, 1, 'report, below the default threshold');
+  assert.equal(run(['--json']).code, 1, '--json, below the default threshold');
+});
+
 test('statusline: se puede usar como statusline y pinta el resumen', () => {
   reset();
   const { code, out } = run(['statusline'], payload(42, 50));

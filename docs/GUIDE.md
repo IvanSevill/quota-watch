@@ -14,7 +14,7 @@ Reference material for the [README](../README.md). Commands assume you are in th
 | `usage.mjs --provider codex --source rollout` | Use only allow-listed rate-limit data in local session files |
 | `usage.mjs --provider codex --app-server-timeout-ms 15000` | Allow up to 15 seconds for the Codex app-server handshake |
 | `usage.mjs remaining <claude\|codex>` | Stable remaining-quota result |
-| `usage.mjs --quiet --min 10` | No output; exits `1` if the tightest Claude window is below 10% left |
+| `usage.mjs --quiet --min 10` | No output; exits `1` if the tightest Claude window is below 10% left, `2` if data is missing, stale, or unknown |
 | `usage.mjs dump` | Save stdin's rate limits, pass stdin through (for the status line) |
 | `usage.mjs statusline` | Save stdin's rate limits and render a usage bar |
 
@@ -35,9 +35,10 @@ Reference material for the [README](../README.md). Commands assume you are in th
 |---|---|---|---|---|
 | `remaining` | usable | low or exhausted | unavailable, stale, or unknown | `64` bad arguments, `70` internal error |
 | `--schema`, `--provider`, `--source` | usable | exhausted or below `--min` | unavailable, stale, unknown, or bad arguments | `64` invalid timeout |
-| Plain report, `--json`, `--quiet` | at or above `--min` (default 10), **and also when data is missing or stale** | below `--min` | | |
+| `--quiet` | at or above `--min` (default 10) | below `--min` | missing, stale, or unknown | |
+| Plain report, `--json` | at or above `--min` (default 10), **and also when data is missing or stale** | below `--min` | | |
 
-The last row is the original Claude interface. It fails open, so prefer `remaining` for guards.
+Guard with `remaining` or `--quiet`. The last row is the original Claude interface for reading values, and it does not fail on untrusted data: check `ok` and `stale` in the `--json` output.
 
 ### Environment variables
 

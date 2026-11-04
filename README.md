@@ -65,7 +65,7 @@ node usage.mjs remaining claude --min 15 || { echo "Not enough quota; try after 
 | `usage.mjs --provider codex` | Codex report: app-server, then session files, then cache |
 | `usage.mjs dump` / `statusline` | Save status-line data and pass it on, or draw a bar |
 
-> **Use `remaining` for guards.** `usage.mjs --quiet --min N` exits `0` when there is no data at all and when data is stale. `remaining` exits `2` in both cases.
+> **Guard with `remaining` or `--quiet --min N`.** Both exit `1` on low quota and `2` when data is missing, stale, or unknown. Without `--quiet`, the plain report and `--json` still exit `0` in those cases.
 
 The [guide](docs/GUIDE.md) covers every option and exit code, the snapshot schema, the OpenCode plugins, and how to tell an agent about the tool.
 
