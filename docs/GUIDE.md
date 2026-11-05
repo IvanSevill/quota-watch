@@ -153,7 +153,7 @@ export default createProjectPythonPathPlugin({
 
 ### Global TUI quota indicator
 
-The TUI plugin renders compact, right-aligned Claude or Codex remaining-capacity bars in OpenCode's global `app_bottom` slot. It does not require the server tool plugin.
+The OpenCode v2 TUI plugin renders compact, right-aligned Claude or Codex remaining-capacity bars below the home and prompt footers. It does not require the server tool plugin.
 
 ```text
 Codex  █████████░░░░  72% 2h 15m
@@ -164,7 +164,7 @@ Claude ████████░░░░░  62% 2h 15m
        ███████████░░  85% 5d 8h
 ```
 
-Each row has the provider name (first row only), a 13-cell bar where filled means remaining, an integer percentage, and a compact reset value.
+Each row has the provider name (first row only), a 13-cell bar where filled means remaining and empty cells are muted, an integer percentage, and a compact reset value.
 
 - Window labels are intentionally omitted. Claude can show two rows (session and weekly); Codex may show one.
 - A leading `~` marks stale data. An unknown reset shows `—`.
@@ -181,18 +181,13 @@ cd /path/to/quota-watch/opencode/tui
 npm install --ignore-scripts
 ```
 
-**Load the plugin** from the global `~/.config/opencode/tui.json`:
+**Load the plugin** through OpenCode v2's global plugin discovery. Create `~/.config/opencode/plugins/quota-indicator/tui.tsx` with an absolute import of the installed entrypoint:
 
-```json
-{
-  "$schema": "https://opencode.ai/tui.json",
-  "plugin": [
-    "file:///path/to/quota-watch/opencode/tui/codex-quota-indicator.tsx"
-  ]
-}
+```tsx
+export { default } from '/absolute/path/to/quota-watch/opencode/tui/codex-quota-indicator.tsx';
 ```
 
-Quit and restart OpenCode after changing TUI configuration or a global plugin loader.
+Quit and restart OpenCode after adding the plugin. OpenCode v1's `tui.json` and `app_bottom` registration do not load this entrypoint.
 
 **Recovery:** if an external plugin prevents launch, the previous documentation suggests starting with `OPENCODE_PURE=1 opencode --auto` (PowerShell: `$env:OPENCODE_PURE = "1"; opencode --auto`). This is OpenCode behaviour and is not checked by this repository.
 
@@ -208,13 +203,7 @@ Quit and restart OpenCode after changing TUI configuration or a global plugin lo
 npm test        # or: node --test test/*.test.mjs
 ```
 
-The TUI interaction suite is separate and needs the dependencies in `opencode/tui`:
-
-```sh
-node --test opencode/tui/quota-control.test.mjs
-```
-
-It transpiles the real TSX entrypoint and tests its fake-host lifecycle plus the extracted control geometry, mouse filtering, and theme-token state machine. Final frame composition remains a manual check in OpenCode. The previous documentation gives the reason as OpenTUI `0.4.3` not exposing its native FFI to the Windows Node runtime; that was not reproduced here.
+The display model is covered by `test/opencode-quota-indicator.test.mjs`. The TUI entrypoint itself has no automated test, so check it in a real OpenCode session.
 
 ## Demo
 

@@ -30,8 +30,6 @@
     "opencode/tui/codex-quota-indicator.tsx",
     "opencode/tui/package-lock.json",
     "opencode/tui/package.json",
-    "opencode/tui/quota-control.mjs",
-    "opencode/tui/quota-control.test.mjs",
     "opencode/tui/tsconfig.json",
     "README.md",
     "LICENSE"

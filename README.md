@@ -83,12 +83,10 @@ The [guide](docs/GUIDE.md) covers every option and exit code, the snapshot schem
 - **Claude data is only as fresh as your last status-line render.** Readings older than 15 minutes count as stale.
 - **Nothing to report at first.** Claude Code omits `rate_limits` until the first API response of a session.
 - **Percentages, not token counts.** The tool reports what each provider exposes.
-- **Testing:** on Node 22 on Linux, `npm test` passes (58 tests) and so does the TUI suite (9 tests). Both use fakes, so the live `codex app-server` and a real OpenCode session were not exercised.
+- **Testing:** `npm test` passes on Node 22 on Linux and uses fakes. The display model is tested, but the OpenCode TUI entrypoint has no automated test.
 
 ```sh
 npm test
-(cd opencode/tui && npm install --ignore-scripts)   # the TUI suite needs TypeScript
-node --test opencode/tui/quota-control.test.mjs
 ```
 
 ## License

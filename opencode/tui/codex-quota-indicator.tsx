@@ -1,207 +1,105 @@
 /** @jsxImportSource @opentui/solid */
 
-import type { TuiPlugin } from '@opencode-ai/plugin/tui';
-import { MouseButton, RGBA } from '@opentui/core';
-import { createSignal, For, type Accessor, type Setter } from 'solid-js';
+import { Plugin } from '@opencode/plugin/tui';
+import { RGBA } from '@opentui/core';
+import { createSignal, For } from 'solid-js';
 
 import { collectClaudeQuota } from '../../quota/claude.mjs';
-import type { QuotaDisplayModel, QuotaDisplayRow, QuotaProvider } from '../quota-display.mjs';
-import {
-  quotaDisplay,
-  loadingQuotaDisplay,
-  quotaBarRgb,
-  selectedQuotaProvider,
-  toggleQuotaProvider,
-  unavailableQuotaDisplay,
-} from '../quota-display.mjs';
+import type { QuotaDisplayRow } from '../quota-display.mjs';
+import { quotaBarRgb, quotaDisplay, loadingQuotaDisplay, unavailableQuotaDisplay } from '../quota-display.mjs';
 import { createQuotaScanner } from '../usage-metrics.mjs';
-import {
-  createQuotaControlInteraction,
-  quotaControlLayout,
-  quotaRowLayout,
-} from './quota-control.mjs';
 
 const REFRESH_MS = 60_000;
-const PROVIDER_WIDTH = 6;
 const BAR_CELLS = 13;
-const PERCENT_WIDTH = 4;
-export const SELECTED_PROVIDER_KEY = 'quota-watch.provider.selected.v1';
 
-const providerLabel = (provider: QuotaProvider) => provider === 'claude' ? 'Claude' : 'Codex';
-
-export function quotaRowParts(provider: QuotaProvider, row: QuotaDisplayRow, index: number) {
+function rowParts(provider: 'codex' | 'claude', row: QuotaDisplayRow, index: number) {
+  const label = provider === 'codex' ? 'Codex' : 'Claude';
   return {
-    provider: (index === 0 ? providerLabel(provider) : '').padEnd(PROVIDER_WIDTH),
+    label: (index === 0 ? label : '').padEnd(6),
     filled: '█'.repeat(row.filledCells),
     empty: '░'.repeat(BAR_CELLS - row.filledCells),
-    percent: row.percentText.padStart(PERCENT_WIDTH),
+    percent: row.percentText.padStart(4),
     reset: row.resetText,
   };
 }
 
-type Scanner = ReturnType<typeof createQuotaScanner>;
-
-type ProviderRuntime = {
-  display: Accessor<QuotaDisplayModel>;
-  setDisplay: Setter<QuotaDisplayModel>;
-  scanner: Scanner;
-  inFlight: boolean;
-  interval?: ReturnType<typeof setInterval>;
-};
-
-type Dependencies = {
-  createScanner: typeof createQuotaScanner;
-  collectClaude: typeof collectClaudeQuota;
-  createInteraction: typeof createQuotaControlInteraction;
-  setInterval: typeof setInterval;
-  clearInterval: typeof clearInterval;
-};
-
-export function createQuotaTui(overrides: Partial<Dependencies> = {}): TuiPlugin {
-  const dependencies: Dependencies = {
-    createScanner: createQuotaScanner,
-    collectClaude: collectClaudeQuota,
-    createInteraction: createQuotaControlInteraction,
-    setInterval,
-    clearInterval,
-    ...overrides,
-  };
-
-  return async (api) => {
-    let storedProvider: unknown;
-    if (api.kv.ready) {
-      try {
-        storedProvider = api.kv.get<unknown>(SELECTED_PROVIDER_KEY);
-      } catch {
-        storedProvider = undefined;
-      }
-    }
-    const initialProvider = selectedQuotaProvider(storedProvider);
-    if (api.kv.ready && storedProvider !== undefined && storedProvider !== initialProvider) {
-      try {
-        api.kv.set(SELECTED_PROVIDER_KEY, initialProvider);
-      } catch {
-        // Host persistence failures must not block plugin startup.
-      }
-    }
-
-    const [selectedProvider, setSelectedProvider] = createSignal<QuotaProvider>(initialProvider);
-    const createRuntime = (provider: QuotaProvider, collectClaude = false): ProviderRuntime => {
-      const [display, setDisplay] = createSignal<QuotaDisplayModel>(loadingQuotaDisplay(provider));
-      return {
-        display,
-        setDisplay,
-        scanner: dependencies.createScanner({
-          cacheMs: REFRESH_MS,
-          ...(collectClaude ? { collect: () => dependencies.collectClaude() } : {}),
-        }),
-        inFlight: false,
-      };
+export default Plugin.define({
+  id: 'quota-watch.quota-indicator',
+  setup(context) {
+    const [settings, updateSettings] = context.storage.store('selection', {
+      initial: { provider: 'codex' as 'codex' | 'claude' },
+    });
+    const [codex, setCodex] = createSignal(loadingQuotaDisplay('codex'));
+    const [claude, setClaude] = createSignal(loadingQuotaDisplay('claude'));
+    const scanners = {
+      codex: createQuotaScanner({ cacheMs: REFRESH_MS }),
+      claude: createQuotaScanner({ cacheMs: REFRESH_MS, collect: () => collectClaudeQuota() }),
     };
-    const runtimes: Record<QuotaProvider, ProviderRuntime> = {
-      claude: createRuntime('claude', true),
-      codex: createRuntime('codex'),
-    };
+    const busy = { codex: false, claude: false };
     let disposed = false;
 
-    const toggleSelectedProvider = () => {
-      const nextProvider = toggleQuotaProvider(selectedProvider());
-      setSelectedProvider(nextProvider);
-      try {
-        api.kv.set(SELECTED_PROVIDER_KEY, nextProvider);
-      } catch {
-        // Keep the immediate in-process selection when persistence is unavailable.
-      }
-    };
-
-    api.slots.register({
-      order: 100,
-      slots: {
-        app_bottom() {
-          const [hovered, setHovered] = createSignal(false);
-          const [pressed, setPressed] = createSignal(false);
-          const [focused, setFocused] = createSignal(false);
-          const interaction = dependencies.createInteraction({
-            toggle: toggleSelectedProvider,
-            hovered,
-            pressed,
-            focused,
-            setHovered,
-            setPressed,
-            setFocused,
-            theme: api.theme.current,
-            leftButton: MouseButton.LEFT,
-          });
-          const display = () => runtimes[selectedProvider()].display();
-          return (
-            <box {...quotaRowLayout}>
-              <box
-                {...quotaControlLayout}
-                flexDirection="column"
-                id="quota-watch-control"
-                backgroundColor={interaction.background()}
-                on:focused={interaction.onFocus}
-                on:blurred={interaction.onBlur}
-                onMouseOver={interaction.onMouseOver}
-                onMouseOut={interaction.onMouseOut}
-                onMouseDown={interaction.onMouseDown}
-                onMouseUp={interaction.onMouseUp}
-              >
-                <For
-                  each={display().rows}
-                  fallback={<text fg={api.theme.current.text}>{providerLabel(display().provider)} — n/a</text>}
-                >
-                  {(row, index) => {
-                    const parts = quotaRowParts(display().provider, row, index());
-                    const [red, green, blue] = quotaBarRgb(row.gradient, row.remainingPercent);
-                    const filledColor = RGBA.fromInts(red, green, blue, 255);
-                    return (
-                      <text>
-                        <span style={{ fg: api.theme.current.text }}>{parts.provider} </span>
-                        <span style={{ fg: filledColor }}>{parts.filled}</span>
-                        <span style={{ fg: api.theme.current.textMuted }}>{parts.empty}</span>
-                        <span style={{ fg: api.theme.current.text }}> {parts.percent} {parts.reset}</span>
-                      </text>
-                    );
-                  }}
-                </For>
-              </box>
-            </box>
-          );
-        },
-      },
-    });
-
-    const refresh = (provider: QuotaProvider) => {
-      const runtime = runtimes[provider];
-      if (disposed || runtime.inFlight) return;
-      runtime.inFlight = true;
-      void runtime.scanner()
+    function refresh(provider: 'codex' | 'claude') {
+      if (disposed || busy[provider]) return;
+      busy[provider] = true;
+      void scanners[provider]()
         .then((snapshot) => {
-          if (!disposed) runtime.setDisplay(quotaDisplay(provider, snapshot));
+          if (disposed) return;
+          const display = quotaDisplay(provider, snapshot);
+          if (provider === 'codex') setCodex(display);
+          else setClaude(display);
         })
         .catch(() => {
-          if (!disposed) runtime.setDisplay(unavailableQuotaDisplay(provider));
+          if (disposed) return;
+          if (provider === 'codex') setCodex(unavailableQuotaDisplay(provider));
+          else setClaude(unavailableQuotaDisplay(provider));
         })
-        .finally(() => {
-          runtime.inFlight = false;
-        });
-    };
-
-    for (const provider of ['claude', 'codex'] as const) {
-      refresh(provider);
-      runtimes[provider].interval = dependencies.setInterval(() => refresh(provider), REFRESH_MS);
+        .finally(() => { busy[provider] = false; });
     }
 
-    api.lifecycle.onDispose(() => {
+    function Indicator() {
+      const provider = () => settings.provider === 'claude' ? 'claude' : 'codex';
+      const display = () => provider() === 'claude' ? claude() : codex();
+      const toggle = () => {
+        void updateSettings((draft) => {
+          draft.provider = provider() === 'codex' ? 'claude' : 'codex';
+        });
+      };
+      return (
+        <box width="100%" flexDirection="row" justifyContent="flex-end">
+          <box flexDirection="column" onMouseUp={(event) => { if (event.button === 0) toggle(); }}>
+            <For each={display().rows} fallback={<text fg={context.theme.text.base}>{provider() === 'codex' ? 'Codex' : 'Claude'} — n/a</text>}>
+              {(row, index) => {
+                const parts = rowParts(provider(), row, index());
+                const [red, green, blue] = quotaBarRgb(row.gradient, row.remainingPercent);
+                const color = RGBA.fromInts(red, green, blue, 255);
+                return (
+                  <text>
+                    <span style={{ fg: context.theme.text.base }}>{parts.label} </span>
+                    <span style={{ fg: color }}>{parts.filled}</span>
+                    <span style={{ fg: context.theme.text.muted }}>{parts.empty}</span>
+                    <span style={{ fg: context.theme.text.base }}> {parts.percent} {parts.reset}</span>
+                  </text>
+                );
+              }}
+            </For>
+          </box>
+        </box>
+      );
+    }
+
+    const removeHome = context.ui.slot({ after: 'home.footer', render: Indicator });
+    const removePrompt = context.ui.slot({ after: 'prompt.footer', render: Indicator });
+    refresh('codex');
+    refresh('claude');
+    const timer = setInterval(() => {
+      refresh('codex');
+      refresh('claude');
+    }, REFRESH_MS);
+    return () => {
       disposed = true;
-      for (const runtime of Object.values(runtimes)) {
-        if (runtime.interval !== undefined) dependencies.clearInterval(runtime.interval);
-      }
-    });
-  };
-}
-
-const tui = createQuotaTui();
-
-export default { id: 'quota-watch.quota-indicator', tui };
+      clearInterval(timer);
+      removeHome();
+      removePrompt();
+    };
+  },
+});
